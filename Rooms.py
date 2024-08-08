@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, List
 import json
 
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:3214@127.0.0.1:5432/message_app"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:root@127.0.0.1:5432/message_app"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL
@@ -127,40 +127,10 @@ def get_rooms_by_user_id(user_id : int, db = Depends(get_db)):
     
     return rooms
 
-@app.post("/rooms/join/{id_user}/{id_room}")
-def join_room(id_user: int, id_room: int, db = Depends(get_db)):
-    user = db.query(User).filter(User.id == id_user).first()
-    room = db.query(Room).filter(Room.id == id_room).first()
-
-    if room is None:
-        raise HTTPException(status_code=404, detail="Room not found")
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    room.participants.append(user)
-    db.commit()
-
-    return {"message": f"User {user.name} has joined room {room.name}"}
-
-
-@app.post("/rooms/exit/{id_user}/{id_room}")
-def exit_room(id_user: int, id_room: int, db = Depends(get_db)):
-    user = db.query(User).filter(User.id == id_user).first()
-    room = db.query(Room).filter(Room.id == id_room).first()
-
-    if room is None:
-        raise HTTPException(status_code=404, detail="Room not found")
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    room.participants.remove(user)
-    db.commit()
-
-    return {"message": f"User {user.name} has exited room {room.name}"}
-
-
 @app.post("/create/user/")
 def create_user(user: UserCreate, db = Depends(get_db)):
+    if db.query(User).filter(User.name == user.name).first():
+        return db.query(User).filter(User.name == user.name).first()
     new_user = User(name=user.name)
     db.add(new_user)
     db.commit()
@@ -184,10 +154,27 @@ def create_message(message: MessageCreate, db = Depends(get_db)):
 
     return new_room
 
+@app.get("users/{user_id}")
+def get_user_by_id(user_id: int, db = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return user
+
+@app.get("/users/")
+def get_users(db = Depends(get_db)):
+    users = db.query(User).all()
+    
+    if not users:
+        raise HTTPException(status_code=404, detail="No users found")
+    
+    return users
 
 @app.get("/rooms/{room_id}/messages/", response_model=List[MessageResponse])
 def get_messages_by_room(room_id: int, db: Session = Depends(get_db)):
-    messages = db.query(Message).filter(Message.room == room_id)
+    messages = db.query(Message).filter(Message.room == room_id).all()
     
     if not messages:
         raise HTTPException(status_code=404, detail="No messages found for this room")
