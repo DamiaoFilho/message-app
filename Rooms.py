@@ -192,7 +192,7 @@ def get_messages_by_room(room_id: int, db: Session = Depends(get_db)):
 
 
 active_connections: Dict[int, List[WebSocket]] = {}
-
+active_connections_rooms: Dict[int, List[WebSocket]] = {}
 
 @app.websocket("/ws/{room_id}/{user_id}")
 async def websocket_endpoint(room_id: int, user_id: int,websocket: WebSocket, db = Depends(get_db)):
@@ -233,14 +233,17 @@ async def websocket_endpoint(room_id: int, user_id: int,websocket: WebSocket, db
 
 
 @app.websocket("/ws/rooms/{user_id}/")
-async def websocket_rooms(user_id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+async def websocket_rooms(user_id: int, websocket: WebSocket, db = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
 
     await websocket.accept()
 
-    if user_id not in active_connections:
-        active_connections[user_id] = []
-    active_connections[user_id].append(websocket)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user_id not in active_connections_rooms:
+        active_connections_rooms[user_id] = []
+    active_connections_rooms[user_id].append(websocket)
 
     try:
         while True:
@@ -255,12 +258,10 @@ async def websocket_rooms(user_id: int, websocket: WebSocket, db: Session = Depe
                 "name": new_room.name,
                 "owner": new_room.owner,
             }
-            for connection in active_connections[user_id]:
+            for connection in active_connections_rooms[user_id]:
                 await connection.send_text(json.dumps(response))
 
     except WebSocketDisconnect:
-        active_connections[user_id].remove(websocket)
-        if not active_connections[user_id]:
-            del active_connections[user_id]
+        active_connections_rooms[user_id].remove(websocket)
 
     
