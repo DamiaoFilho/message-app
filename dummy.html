@@ -12,7 +12,7 @@
     </form>
     <ul id="messages"></ul>
     <script>
-      var ws = new WebSocket("ws://localhost:8001/ws/1/2");
+      var ws = new WebSocket("ws://localhost:8001/ws/rooms/1/");
       ws.onmessage = function (event) {
         var messages = document.getElementById("messages");
         var message = document.createElement("li");

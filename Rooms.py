@@ -112,6 +112,14 @@ def get_rooms(db = Depends(get_db)):
 
     return room 
 
+@app.get("/rooms/{room_id}")
+def get_room_by_id(room_id: int, db = Depends(get_db)):
+    room = db.query(Room).filter(Room.id == room_id).first()
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    return room
 
 @app.get("/rooms/{id}")
 def get_rooms_by_user_id(user_id : int, db = Depends(get_db)):
@@ -154,7 +162,7 @@ def create_message(message: MessageCreate, db = Depends(get_db)):
 
     return new_room
 
-@app.get("users/{user_id}")
+@app.get("/users/{user_id}")
 def get_user_by_id(user_id: int, db = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     
@@ -210,7 +218,9 @@ async def websocket_endpoint(room_id: int, user_id: int,websocket: WebSocket, db
             db.commit()
             db.refresh(new_message)
             response = {
-                "owner": user.name,
+                "id": new_message.id,
+                "owner": user.id,
+                "room": room.id,
                 "content": new_message.content,
                 "created_at": new_message.created_at.isoformat()
             }
@@ -220,3 +230,37 @@ async def websocket_endpoint(room_id: int, user_id: int,websocket: WebSocket, db
 
     except WebSocketDisconnect:
         active_connections[room_id].remove(websocket)
+
+
+@app.websocket("/ws/rooms/{user_id}/")
+async def websocket_rooms(user_id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    await websocket.accept()
+
+    if user_id not in active_connections:
+        active_connections[user_id] = []
+    active_connections[user_id].append(websocket)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(data)
+            new_room = Room(name=data, owner=user.id)
+            db.add(new_room)
+            db.commit()
+            db.refresh(new_room)
+            response = {
+                "id": new_room.id,
+                "name": new_room.name,
+                "owner": new_room.owner,
+            }
+            for connection in active_connections[user_id]:
+                await connection.send_text(json.dumps(response))
+
+    except WebSocketDisconnect:
+        active_connections[user_id].remove(websocket)
+        if not active_connections[user_id]:
+            del active_connections[user_id]
+
+    
